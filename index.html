@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Trimmer - Your files stay in browser</title>
+    <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/vue/3.2.31/vue.global.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@6.6.4/dist/wavesurfer.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@6.6.4/dist/plugin/wavesurfer.regions.min.js"></script>
+    <!-- 删除 7.0.0 版本的引用，因为与 6.6.4 版本不兼容 -->
+    <script src="https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/wavesurfer.js/7.0.0/plugins/regions.min.js"></script>
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .drop-zone {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+
+        .drop-zone.dragover {
+            background-color: #e1e1e1;
+            border-color: #999;
+        }
+
+        .waveform {
+            margin: 20px 0;
+        }
+
+        .controls {
+            margin: 20px 0;
+        }
+
+        button {
+            margin: 0 10px;
+            padding: 8px 16px;
+        }
+
+        .time-info {
+            margin: 10px 0;
+        }
+
+        .status-message {
+            margin: 10px 0;
+            color: #4F4A85;
+            font-weight: bold;
+        }
+    </style>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-V3W9G1EGL5"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+
+        gtag('config', 'G-V3W9G1EGL5');
+    </script>
+</head>
+
+<body>
+    <div id="app">
+        <div class="container">
+            <div class="privacy-notice"
+                style="background-color: #e8f5e9; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+                <p style="margin: 0; color: #2e7d32;">
+                    ✂️ This is a simple online audio trimmer that helps you quickly cut your audio files.
+                    <br>
+                    📢 Privacy Notice: Your audio files are processed entirely in your browser and will not be uploaded
+                    to any server.
+                    <br>
+                    ⚠️ Browser Requirements: Please use modern browsers like Chrome, Firefox, or Edge that support Web
+                    Audio API.
+                </p>
+            </div>
+            <div class="drop-zone" @dragover.prevent @drop.prevent="handleDrop" @dragenter="dragover = true"
+                @dragleave="dragover = false" :class="{ dragover }" @click="triggerFileInput">
+                Click or drag audio file here
+                <input type="file" ref="fileInput" style="display: none" @change="handleFileSelect" accept="audio/*">
+            </div>
+            <div id="waveform" class="waveform"></div>
+            <div class="time-info" v-if="duration">
+                Start Time: {{ formatTime(startTime) }} - End Time: {{ formatTime(endTime) }}
+                <br>
+                Total Duration: {{ formatTime(duration) }}
+            </div>
+            <div class="controls" style="display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                    <button @click="playPause">Play/Pause</button>
+                    <button @click="trim">Trim</button>
+                    <button @click="downloadAudio">Download</button>
+                </div>
+                <div style="color: #2e7d32;">
+                    <a href="/zh/" style="color: #2e7d32; text-decoration: none;">中文</a> /
+                    <a href="/" style="color: #2e7d32; text-decoration: none;">English</a>
+                </div>
+            </div>
+            <div v-if="trimStatus" class="status-message">{{ trimStatus }}</div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue
+
+        createApp({
+            data() {
+                return {
+                    wavesurfer: null,
+                    dragover: false,
+                    audioFile: null,
+                    startTime: 0,
+                    endTime: 0,
+                    duration: 0,
+                    trimmedBlob: null,
+                    trimStatus: '' // 添加状态提示文本
+                }
+            },
+            mounted() {
+                this.initWaveSurfer()
+            },
+            methods: {
+                initWaveSurfer() {
+                    this.wavesurfer = WaveSurfer.create({
+                        container: '#waveform',
+                        waveColor: '#4F4A85',
+                        progressColor: '#383351',
+                        plugins: [
+                            WaveSurfer.regions.create({
+                                dragSelection: true,
+                                slop: 5, // 增加可拖动区域的大小
+                                handleStyle: {
+                                    left: {
+                                        width: '8px',  // 增加左侧边框宽度
+                                        backgroundColor: 'rgba(0, 123, 255, 0.5)'  // 添加半透明背景色
+                                    },
+                                    right: {
+                                        width: '8px',  // 增加右侧边框宽度
+                                        backgroundColor: 'rgba(0, 123, 255, 0.5)'  // 添加半透明背景色
+                                    }
+                                }
+                            })
+                        ]
+                    })
+                    this.wavesurfer.on('ready', () => {
+                        this.duration = this.wavesurfer.getDuration()
+                        this.endTime = this.duration
+                        this.wavesurfer.addRegion({
+                            start: 0,
+                            end: this.duration,
+                            drag: true,
+                            resize: true,
+                            color: 'rgba(0, 123, 255, 0.1)',
+                            handleStyle: {      // 自定义边框手柄样式
+                                left: {
+                                    width: '8px',
+                                    backgroundColor: 'rgba(0, 123, 255, 0.5)'
+                                },
+                                right: {
+                                    width: '8px',
+                                    backgroundColor: 'rgba(0, 123, 255, 0.5)'
+                                }
+                            }
+                        })
+                    })
+
+                    this.wavesurfer.on('region-updated', region => {
+                        this.startTime = region.start
+                        this.endTime = region.end
+                    })
+                },
+                triggerFileInput() {
+                    this.$refs.fileInput.click()
+                },
+                handleFileSelect(event) {
+                    const file = event.target.files[0]
+                    if (file) {
+                        this.loadAudioFile(file)
+                    }
+                },
+                handleDrop(event) {
+                    this.dragover = false
+                    const file = event.dataTransfer.files[0]
+                    if (file && file.type.startsWith('audio/')) {
+                        this.loadAudioFile(file)
+                    }
+                },
+                loadAudioFile(file) {
+                    this.audioFile = file
+                    this.wavesurfer.loadBlob(file)
+                },
+                playPause() {
+                    this.wavesurfer.playPause()
+                },
+                async trim() {
+                    if (!this.trimmedBlob) {
+                        alert('Please trim the audio first!')
+                        return
+                    }
+                    const audioContext = new AudioContext()
+                    const response = await fetch(URL.createObjectURL(this.audioFile))
+                    const arrayBuffer = await response.arrayBuffer()
+                    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+
+                    const sampleRate = audioBuffer.sampleRate
+                    const channels = audioBuffer.numberOfChannels
+                    const startOffset = Math.floor(this.startTime * sampleRate)
+                    const endOffset = Math.floor(this.endTime * sampleRate)
+                    const frameCount = endOffset - startOffset
+
+                    const trimmedBuffer = audioContext.createBuffer(channels, frameCount, sampleRate)
+                    for (let channel = 0; channel < channels; channel++) {
+                        const channelData = audioBuffer.getChannelData(channel)
+                        const trimmedData = trimmedBuffer.getChannelData(channel)
+                        for (let i = 0; i < frameCount; i++) {
+                            trimmedData[i] = channelData[startOffset + i]
+                        }
+                    }
+                    const trimmedAudio = this.audioBufferToWav(trimmedBuffer)
+                    this.trimmedBlob = new Blob([trimmedAudio], { type: 'audio/wav' })
+                    this.trimStatus = 'Trimming completed! Click the download button to save your audio.'
+                },
+                downloadAudio() {
+                    if (!this.trimmedBlob) {
+                        alert('Please trim the audio first!')
+                        return
+                    }
+                    const url = URL.createObjectURL(this.trimmedBlob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = 'trimmed_audio.wav'
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    URL.revokeObjectURL(url)
+                },
+                audioBufferToWav(audioBuffer) {
+                    // 直接在这里实现音频数据的交织，不再调用单独的方法
+                    const channels = audioBuffer.numberOfChannels
+                    const length = audioBuffer.length * channels
+                    const interleaved = new Float32Array(length)
+
+                    for (let i = 0; i < audioBuffer.length; i++) {
+                        for (let channel = 0; channel < channels; channel++) {
+                            interleaved[i * channels + channel] = audioBuffer.getChannelData(channel)[i]
+                        }
+                    }
+
+                    // 将 Float32Array 转换为 Int16Array
+                    const samples = new Int16Array(interleaved.length)
+                    for (let i = 0; i < interleaved.length; i++) {
+                        const s = Math.max(-1, Math.min(1, interleaved[i]))
+                        samples[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
+                    }
+                    const dataView = this.createWavHeader(interleaved.length, audioBuffer.sampleRate)
+                    return new Blob([dataView, samples.buffer], { type: 'audio/wav' })
+                },
+                // 删除原来的 interleave 方法
+                createWavHeader(samples, sampleRate) {
+                    const buffer = new ArrayBuffer(44)
+                    const view = new DataView(buffer)
+
+                    const writeString = (view, offset, string) => {
+                        for (let i = 0; i < string.length; i++) {
+                            view.setUint8(offset + i, string.charCodeAt(i))
+                        }
+                    }
+
+                    const channels = 2 // 改回双声道
+                    const bytesPerSample = 2 // 16位采样
+                    const blockAlign = channels * bytesPerSample
+                    const byteRate = sampleRate * blockAlign
+                    const dataSize = samples * bytesPerSample // 实际数据大小
+
+                    writeString(view, 0, 'RIFF')
+                    view.setUint32(4, 36 + dataSize, true) // 文件总大小
+                    writeString(view, 8, 'WAVE')
+                    writeString(view, 12, 'fmt ')
+                    view.setUint32(16, 16, true)
+                    view.setUint16(20, 1, true)
+                    view.setUint16(22, channels, true)
+                    view.setUint32(24, sampleRate, true)
+                    view.setUint32(28, byteRate, true)
+                    view.setUint16(32, blockAlign, true)
+                    view.setUint16(34, 16, true)
+                    writeString(view, 36, 'data')
+                    view.setUint32(40, dataSize, true) // 数据块大小
+
+                    return buffer
+                },
+                formatTime(time) {
+                    if (!time && time !== 0) return '0:00'
+                    const minutes = Math.floor(time / 60)
+                    const seconds = Math.floor(time % 60)
+                    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+                },
+            }
+        }).mount('#app')
+    </script>
+</body>
+
+</html>

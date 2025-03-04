@@ -198,8 +198,8 @@
                     this.wavesurfer.playPause()
                 },
                 async trim() {
-                    if (!this.trimmedBlob) {
-                        alert('Please trim the audio first!')
+                    if (!this.audioFile) {
+                        alert('Please load the audio first!')
                         return
                     }
                     const audioContext = new AudioContext()

@@ -196,8 +196,8 @@
                     this.wavesurfer.playPause()
                 },
                 async trim() {
-                    if (!this.trimmedBlob) {
-                        alert('请先裁剪音频！')
+                    if (!this.audioFile) {
+                        alert('请先加载音频！')
                         return
                     }
                     const audioContext = new AudioContext()
